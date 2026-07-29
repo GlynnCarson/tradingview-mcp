@@ -21,6 +21,14 @@ dependencies = [
   "feedparser>=6.0.12",
   "httpx>=0.27",
   "mcp[cli]>=1.12.0",
+  # Makes requests/urllib3 trust the OS certificate store (in addition to the
+  # certifi bundle). Needed on machines where HTTPS-scanning security
+  # software (e.g. Avast Web Shield) intercepts TLS with its own injected
+  # root cert, which certifi's bundled list doesn't include — without this,
+  # every upstream call (TradingView scanner, Yahoo Finance, etc.) fails
+  # with CERTIFICATE_VERIFY_FAILED. No-op / harmless on machines without
+  # TLS interception.
+  "pip-system-certs>=4.0",
   "requests>=2.32",
   # Pinned to ==3.0.0 on purpose. 3.2.0 makes a bare Query() default to a
   # *stock* preset filter that silently returns 0 rows for crypto/futures
