@@ -78,6 +78,17 @@ from tradingview_mcp.core.services.backtest_service import (
     compare_strategies as _compare_strategies,
     walk_forward_backtest,
 )
+from tradingview_mcp.core.services.bracket_backtest_service import (
+    run_bracket_backtest,
+    run_bracket_sweep,
+    run_bracket_walk_forward,
+)
+from tradingview_mcp.core.services.regime_service import get_market_regime
+from tradingview_mcp.core.services.paper_trader_service import (
+    paper_reset as _paper_reset,
+    paper_step as _paper_step,
+    paper_status as _paper_status,
+)
 from tradingview_mcp.core.utils.validators import (
     sanitize_timeframe,
     sanitize_exchange,
@@ -735,6 +746,243 @@ def walk_forward_backtest_strategy(
         symbol, strategy, period, initial_capital,
         commission_pct, slippage_pct, n_splits, train_ratio, interval,
     )
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Bracket Backtest (1m-1d, long+short)", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def bracket_backtest(
+    symbol: str,
+    strategy: str = "squeeze_breakout",
+    interval: str = "1h",
+    days: int = 90,
+    direction: str = "both",
+    rr: float = 1.5,
+    atr_mult: float = 1.0,
+    max_hold_bars: int = 60,
+    fee_pct: float = 0.05,
+    slippage_pct: float = 0.02,
+    initial_capital: float = 10000.0,
+    include_trade_log: bool = False,
+    regime_filter: bool = False,
+    regime_anchor: str = "BTCUSDT",
+    regime_interval: str = "4h",
+) -> dict:
+    """Backtest scalp/day/swing strategies (long AND short) on Binance 1m-1d klines.
+
+    Unlike backtest_strategy (Yahoo, 1h/1d, long-only), this simulates real
+    execution: ATR-bracket exits (stop / take-profit / time-stop) checked
+    intrabar against high/low, conservative stop-first fills, and per-side
+    fee + slippage so the round-trip cost hurdle is explicit.
+
+    Args:
+        symbol: Binance pair, e.g. BTCUSDT, ETHUSDT, SOLUSDT
+        strategy: squeeze_breakout (Bollinger squeeze → band-break entry)
+                  | ema_momentum (EMA 9/21 cross gated by EMA200 side)
+        interval: 1m | 3m | 5m | 15m | 30m | 1h | 4h | 1d (candle size)
+        days: History window, 1-730. Suggested: 5m→14, 15m→30, 1h→90-365,
+              4h→365-730, 1d→730. (Capped at 30k candles total.)
+        direction: both | long | short
+        rr: Reward:risk ratio for the take-profit bracket (default 1.5)
+        atr_mult: Stop distance in ATR(14) multiples (default 1.0)
+        max_hold_bars: Time-stop — force exit after this many bars (default 60)
+        fee_pct: Fee % per side (default 0.05 = Binance USDT-M futures taker;
+                 use 0.02 for maker, 0.1 for spot taker)
+        slippage_pct: Slippage % per side (default 0.02)
+        initial_capital: Starting capital in USD (default $10,000)
+        include_trade_log: Include every trade with direction/exit_reason (default False)
+        regime_filter: Gate signals by higher-timeframe trend — longs only in
+                       anchor uptrend, shorts only in downtrend, flat in chop
+        regime_anchor: Symbol whose trend gates trades (default BTCUSDT — the
+                       market leader; "self" = the traded pair itself)
+        regime_interval: Anchor timeframe for the regime read (default 4h)
+    """
+    return run_bracket_backtest(
+        symbol, strategy, interval, days, direction, rr, atr_mult,
+        max_hold_bars, fee_pct, slippage_pct, initial_capital, include_trade_log,
+        regime_filter, regime_anchor, regime_interval,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Bracket Parameter Sweep", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def bracket_sweep(
+    symbol: str,
+    strategy: str = "squeeze_breakout",
+    interval: str = "1h",
+    days: int = 180,
+    direction: str = "both",
+    rr_values: Optional[list[float]] = None,
+    atr_mult_values: Optional[list[float]] = None,
+    max_hold_bars: int = 60,
+    fee_pct: float = 0.05,
+    slippage_pct: float = 0.02,
+    regime_filter: bool = False,
+    regime_anchor: str = "BTCUSDT",
+    regime_interval: str = "4h",
+) -> dict:
+    """Grid-search bracket parameters (rr × atr_mult) with a stability verdict.
+
+    Runs every combination on the same Binance data (candles and signals are
+    computed once) and checks whether the best cell's NEIGHBORS are also
+    profitable — a profitable cell surrounded by losers is noise, not edge.
+    Verdicts: STABLE_CANDIDATE | FRAGILE | NO_EDGE.
+
+    Args:
+        symbol: Binance pair, e.g. BTCUSDT
+        strategy: squeeze_breakout | ema_momentum
+        interval: 1m | 3m | 5m | 15m | 30m | 1h | 4h | 1d
+        days: History window, 1-730 (default 180)
+        direction: both | long | short
+        rr_values: Reward:risk grid values (default [1.0, 1.5, 2.0, 3.0], max 8)
+        atr_mult_values: Stop-distance grid in ATR multiples (default [1.0, 1.5, 2.0, 3.0])
+        max_hold_bars: Time-stop in bars (default 60)
+        fee_pct: Fee % per side (default 0.05)
+        slippage_pct: Slippage % per side (default 0.02)
+        regime_filter: Gate signals by anchor trend (see bracket_backtest)
+        regime_anchor: Anchor symbol (default BTCUSDT; "self" = traded pair)
+        regime_interval: Anchor timeframe (default 4h)
+    """
+    return run_bracket_sweep(
+        symbol, strategy, interval, days, direction, rr_values,
+        atr_mult_values, max_hold_bars, fee_pct, slippage_pct,
+        regime_filter=regime_filter, regime_anchor=regime_anchor,
+        regime_interval=regime_interval,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Bracket Walk-Forward Optimizer", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def bracket_walk_forward(
+    symbol: str,
+    strategy: str = "squeeze_breakout",
+    interval: str = "1h",
+    days: int = 365,
+    direction: str = "both",
+    n_splits: int = 4,
+    train_ratio: float = 0.7,
+    rr_values: Optional[list[float]] = None,
+    atr_mult_values: Optional[list[float]] = None,
+    min_trades: int = 5,
+    max_hold_bars: int = 60,
+    fee_pct: float = 0.05,
+    slippage_pct: float = 0.02,
+    regime_filter: bool = False,
+    regime_anchor: str = "BTCUSDT",
+    regime_interval: str = "4h",
+) -> dict:
+    """True walk-forward optimization — THE gate a strategy must pass before paper trading.
+
+    Splits history into sequential folds. In each fold the best (rr, atr_mult)
+    is picked on the train window, then applied ONLY to the unseen test window;
+    positions are force-closed at segment boundaries so nothing leaks. The
+    aggregated out-of-sample result is the honest estimate of live behaviour.
+    Verdicts: PASSED | MIXED | OVERFIT | NO_EDGE, plus parameter-stability
+    (do folds keep choosing the same parameters?).
+
+    Args:
+        symbol: Binance pair, e.g. BTCUSDT
+        strategy: squeeze_breakout | ema_momentum
+        interval: 1m | 3m | 5m | 15m | 30m | 1h | 4h | 1d
+        days: History window, 1-730 (default 365; use ≥180 for 1h)
+        direction: both | long | short
+        n_splits: Number of sequential folds, 2-10 (default 4)
+        train_ratio: Train fraction per fold, 0.5-0.9 (default 0.7)
+        rr_values: Reward:risk grid (default [1.0, 1.5, 2.0, 3.0], max 8)
+        atr_mult_values: Stop-distance grid in ATR multiples (default [1.0, 1.5, 2.0, 3.0])
+        min_trades: Minimum train trades for a combo to be eligible (default 5)
+        max_hold_bars: Time-stop in bars (default 60)
+        fee_pct: Fee % per side (default 0.05)
+        slippage_pct: Slippage % per side (default 0.02)
+        regime_filter: Gate signals by anchor trend (see bracket_backtest)
+        regime_anchor: Anchor symbol (default BTCUSDT; "self" = traded pair)
+        regime_interval: Anchor timeframe (default 4h)
+    """
+    return run_bracket_walk_forward(
+        symbol, strategy, interval, days, direction, n_splits, train_ratio,
+        rr_values, atr_mult_values, min_trades, max_hold_bars, fee_pct,
+        slippage_pct, regime_filter=regime_filter, regime_anchor=regime_anchor,
+        regime_interval=regime_interval,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Paper Trader — Reset Account", readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+def paper_reset(
+    confirm: bool = False,
+    initial_capital: float = 10000.0,
+    risk_pct_per_trade: float = 1.0,
+    daily_loss_halt_pct: float = 3.0,
+    max_drawdown_kill_pct: float = 15.0,
+    fee_pct: float = 0.05,
+    slippage_pct: float = 0.02,
+    strategies: Optional[list[dict]] = None,
+) -> dict:
+    """Create or wipe the paper-trading account (fake money, real Binance data).
+
+    Defaults to the two walk-forward-validated strategies: BTC squeeze-breakout
+    1h (ungated) and ETH squeeze-breakout 1h (regime-gated by BTC 4h trend).
+    Refuses to overwrite an existing account unless confirm=true.
+
+    Args:
+        confirm: Required true to wipe an existing account
+        initial_capital: Starting fake capital in USD (default $10,000)
+        risk_pct_per_trade: % of capital risked per trade via ATR sizing (default 1.0)
+        daily_loss_halt_pct: Realized daily loss % that halts new entries until
+                             the next UTC day (default 3.0)
+        max_drawdown_kill_pct: Drawdown from peak that freezes the account until
+                               manual reset (default 15.0)
+        fee_pct: Fee % per side (default 0.05)
+        slippage_pct: Slippage % per side (default 0.02)
+        strategies: Optional custom strategy list; each item needs id, symbol,
+                    strategy, interval, and may set direction, rr, atr_mult,
+                    max_hold_bars, regime_filter, regime_anchor, regime_interval
+    """
+    return _paper_reset(confirm, initial_capital, risk_pct_per_trade,
+                        daily_loss_halt_pct, max_drawdown_kill_pct,
+                        fee_pct, slippage_pct, strategies)
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Paper Trader — Step", readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+def paper_step() -> dict:
+    """Advance the paper trader one tick against live Binance data.
+
+    Processes every candle that CLOSED since the last step (safe to call any
+    time; catches up after downtime; ignores the in-progress candle). Manages
+    open positions with the same stop-first bracket semantics as the
+    backtester, then takes new entries if a signal fired and the regime gate,
+    daily-loss halt, and kill switch all allow. Returns the events that
+    happened this tick plus the account snapshot.
+
+    Call this hourly (the strategies run on 1h candles) — or run the daemon:
+    `python -m tradingview_mcp.core.services.paper_trader_service --loop 3600`
+    """
+    return _paper_step()
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Paper Trader — Status", readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+def paper_status() -> dict:
+    """Paper-trading account report: capital, PnL, drawdown, risk-rule state,
+    per-strategy win rates, open positions, and the last 10 trades.
+    """
+    return _paper_status()
+
+
+@mcp.tool(annotations=ToolAnnotations(title="Market Regime Snapshot", readOnlyHint=True, destructiveHint=False, openWorldHint=True))
+def market_regime(
+    symbol: str = "BTCUSDT",
+    interval: str = "4h",
+    days: int = 180,
+) -> dict:
+    """Current market regime (trend up/down/chop + volatility) for an anchor symbol.
+
+    The same classification that regime_filter applies bar-by-bar inside the
+    bracket backtests: EMA50/EMA200 ratio with a dead-band for trend, ATR%
+    vs its own past median for volatility. Reports which trade directions
+    the gate currently allows, recent regime transitions, and a 30-bar
+    trend histogram.
+
+    Args:
+        symbol: Binance pair to classify (default BTCUSDT — the market leader)
+        interval: Timeframe for the regime read (default 4h)
+        days: History window, 1-730 (default 180; needs enough for EMA200 warmup)
+    """
+    return get_market_regime(symbol, interval, days)
 
 
 # ── Yahoo Finance tools ────────────────────────────────────────────────────────

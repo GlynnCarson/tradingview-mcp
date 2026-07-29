@@ -1,0 +1,45 @@
+name: Paper trader tick
+
+on:
+  schedule:
+    # Hourly, a few minutes past the hour so the 1h candle is definitely closed.
+    - cron: "7 * * * *"
+  workflow_dispatch: {}
+
+# Never let two ticks run at once — state is committed back to the repo.
+concurrency:
+  group: paper-trader
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pull the freshest state even if a previous tick just pushed.
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run paper tick and rebuild dashboard
+        run: python scripts/paper_tick.py
+
+      - name: Commit state and dashboard
+        run: |
+          git config user.name "paper-trader-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/paper_state.json docs/index.html
+          if git diff --cached --quiet; then
+            echo "nothing changed this tick"
+          else
+            git commit -m "paper tick: $(date -u '+%Y-%m-%d %H:%M') UTC"
+            git pull --rebase origin ${GITHUB_REF_NAME}
+            git push
+          fi

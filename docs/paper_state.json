@@ -1,0 +1,47 @@
+{
+ "created": "2026-07-29T14:58:44.989726+00:00",
+ "config": {
+  "initial_capital": 10000.0,
+  "risk_pct_per_trade": 1.0,
+  "daily_loss_halt_pct": 3.0,
+  "max_drawdown_kill_pct": 15.0,
+  "fee_pct": 0.05,
+  "slippage_pct": 0.02,
+  "strategies": [
+   {
+    "id": "btc_squeeze_1h",
+    "symbol": "BTCUSDT",
+    "strategy": "squeeze_breakout",
+    "interval": "1h",
+    "direction": "both",
+    "rr": 1.5,
+    "atr_mult": 2.0,
+    "max_hold_bars": 60,
+    "regime_filter": false
+   },
+   {
+    "id": "eth_squeeze_1h_gated",
+    "symbol": "ETHUSDT",
+    "strategy": "squeeze_breakout",
+    "interval": "1h",
+    "direction": "both",
+    "rr": 2.0,
+    "atr_mult": 2.0,
+    "max_hold_bars": 60,
+    "regime_filter": true,
+    "regime_anchor": "BTCUSDT",
+    "regime_interval": "4h"
+   }
+  ]
+ },
+ "capital": 10000.0,
+ "peak_capital": 10000.0,
+ "killed": false,
+ "open_positions": [],
+ "closed_trades": [],
+ "daily": {},
+ "last_processed": {
+  "btc_squeeze_1h": 1785333600000,
+  "eth_squeeze_1h_gated": 1785333600000
+ }
+}

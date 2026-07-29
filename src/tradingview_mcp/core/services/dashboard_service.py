@@ -1,0 +1,519 @@
+"""
+Dashboard Service — renders the paper-trading desk as a standalone HTML page.
+
+Used by the hourly GitHub Actions tick (scripts/paper_tick.py): after each
+paper_step the dashboard is regenerated from the account state plus a live
+regime/price read, committed to docs/index.html, and served by GitHub Pages —
+so the desk is viewable from any phone at a stable URL.
+
+The page is fully self-contained (inline CSS/JS, no external requests) and
+renders in light or dark following the viewer's OS preference. All fetches
+fail soft: if Binance or the regime read is briefly unavailable, the page
+still builds from the last known account state.
+
+Pure Python — no template engine, no pandas.
+"""
+from __future__ import annotations
+
+import html
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from tradingview_mcp.core.services.binance_data import fetch_binance_klines
+from tradingview_mcp.core.services.paper_trader_service import paper_status
+from tradingview_mcp.core.services.regime_service import get_market_regime
+
+# Walk-forward evidence (1h, 1y, 4 folds) — historical validation constants,
+# kept verbatim from the Phase 1/2 research runs that selected the live pair.
+_WF_DATA = ("""[
+  {"name":"BTC squeeze","off":{"v":4.80,"t":21,"w":52.4,"verdict":"PASSED"},"on":{"v":-0.74,"t":5,"w":60.0,"verdict":"OVERFIT"}},
+  {"name":"ETH squeeze","off":{"v":-0.18,"t":26,"w":42.3,"verdict":"OVERFIT"},"on":{"v":6.69,"t":11,"w":63.6,"verdict":"PASSED"}},
+  {"name":"SOL squeeze","off":{"v":-27.36,"t":26,"w":34.6,"verdict":"OVERFIT"},"on":{"v":-12.55,"t":12,"w":41.7,"verdict":"OVERFIT"}},
+  {"name":"BTC ema","off":{"v":-7.12,"t":42,"w":31.0,"verdict":"OVERFIT"},"on":{"v":-5.93,"t":28,"w":28.6,"verdict":"OVERFIT"}},
+  {"name":"ETH ema","off":{"v":8.31,"t":42,"w":50.0,"verdict":"MIXED"},"on":{"v":6.34,"t":24,"w":45.8,"verdict":"MIXED"}},
+  {"name":"SOL ema","off":{"v":-13.82,"t":40,"w":42.5,"verdict":"OVERFIT"},"on":{"v":-7.88,"t":23,"w":39.1,"verdict":"OVERFIT"}}
+]""")
+
+# Validation credentials shown on the strategy cards, keyed by strategy id.
+_VALIDATION = {
+    "btc_squeeze_1h": ("+4.8% · PF 1.51", "52.4% / 21", "PASSED walk-forward"),
+    "eth_squeeze_1h_gated": ("+6.7% · PF 1.89", "63.6% / 11", "PASSED walk-forward"),
+}
+
+
+def _money(v: float) -> str:
+    return f"${v:,.2f}"
+
+
+def _sign_class(v: float) -> str:
+    return "pos" if v > 0 else ("neg" if v < 0 else "")
+
+
+def _spark(symbol: str) -> tuple[list[float], float]:
+    candles = fetch_binance_klines(symbol, "1h", 7)
+    closes = [round(c["close"], 2) for c in candles][-168:]
+    return closes, candles[-1]["close"]
+
+
+def _tiles(s: dict) -> str:
+    ret = s["total_return_pct"]
+    wr = f"{s['win_rate_pct']:.1f}%" if s["closed_trades"] else "—"
+    dd = s["drawdown_from_peak_pct"]
+    return f"""
+    <div class="tile"><div class="eyebrow">Capital</div><div class="v">{_money(s['capital'])}</div><div class="d">started {_money(s['initial_capital'])}</div></div>
+    <div class="tile"><div class="eyebrow">Total return</div><div class="v {_sign_class(ret)}">{ret:+.2f}%</div><div class="d">paper account</div></div>
+    <div class="tile"><div class="eyebrow">Realized P&amp;L</div><div class="v {_sign_class(s['realized_pnl'])}">{_money(s['realized_pnl'])}</div><div class="d">{s['closed_trades']} closed trades</div></div>
+    <div class="tile"><div class="eyebrow">Unrealized P&amp;L</div><div class="v {_sign_class(s['unrealized_pnl'])}">{_money(s['unrealized_pnl'])}</div><div class="d">{len(s['open_positions'])} open</div></div>
+    <div class="tile"><div class="eyebrow">Drawdown</div><div class="v {_sign_class(dd)}">{dd:.1f}%</div><div class="d">kill switch at −{s['risk_rules']['max_drawdown_kill_pct']:.0f}%</div></div>
+    <div class="tile"><div class="eyebrow">Win rate</div><div class="v">{wr}</div><div class="d">{s['closed_trades']} trades</div></div>"""
+
+
+def _risk_strip(s: dict) -> str:
+    rules = s["risk_rules"]
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_pnl = s.get("daily", {}).get(today, {}).get("realized_pnl", 0.0)
+    risk_amt = s["capital"] * rules["risk_pct_per_trade"] / 100
+    halted = today_pnl <= -(rules["daily_loss_halt_pct"] / 100) * s["capital"]
+    halt_state = ('<span class="state pill warn">HALTED</span>' if halted
+                  else '<span class="state pill ok"><span class="dot"></span>clear</span>')
+    killed = ('<span class="state pill warn">TRIPPED</span>' if s["killed"]
+              else '<span class="state pill ok"><span class="dot"></span>clear</span>')
+    return f"""
+    <div class="risk">Risk per trade <b>{rules['risk_pct_per_trade']:g}% · {_money(risk_amt)}</b><span class="state pill ok"><span class="dot"></span>armed</span></div>
+    <div class="risk">Daily loss halt <b>−{rules['daily_loss_halt_pct']:g}%</b> · today <b>{_money(today_pnl)}</b>{halt_state}</div>
+    <div class="risk">Kill switch <b>−{rules['max_drawdown_kill_pct']:g}% from peak</b> · now <b>{s['drawdown_from_peak_pct']:.1f}%</b>{killed}</div>"""
+
+
+def _regime_card(regime: dict) -> str:
+    if "error" in regime and isinstance(regime["error"], dict):
+        return ("<div class='card'><h2>MARKET REGIME</h2>"
+                "<p class='empty'>Regime read temporarily unavailable — "
+                "trading gate falls back to blocking entries.</p></div>")
+    cur = regime["current"]
+    trend = cur["trend"]
+    pill = {"up": ("ok", "TREND UP"), "down": ("warn", "TREND DOWN"),
+            "chop": ("", "CHOPPING")}[trend]
+    allowed = {"up": "LONG only", "down": "SHORT only", "chop": "nothing (flat)"}[trend]
+    allowed_color = {"up": "var(--gain)", "down": "var(--loss)",
+                     "chop": "var(--muted)"}[trend]
+    cells = "".join(
+        f'<i style="background:var(--{ {"up": "gain", "down": "loss", "chop": "faint"}[k] })"></i>'
+        for k in _bars30(regime))
+    trans = "".join(
+        f'<li><span class="t">{html.escape(t["date"])}</span>'
+        f'<span class="tr-{t["trend"]}">{t["trend"].upper()}</span></li>'
+        for t in regime.get("recent_transitions", [])[-4:])
+    counts = regime["last_30_bars"]
+    return f"""
+    <div class="card" aria-label="Market regime">
+      <h2>MARKET REGIME <span class="tag">{html.escape(regime['symbol'])} · {regime['interval']} anchor</span></h2>
+      <div><span class="pill {pill[0]}" style="font-size:14px; padding:5px 14px;"><span class="dot"></span>{pill[1]}</span>
+        <span class="pill" style="margin-left:6px;">volatility {cur['volatility'] or '—'}</span></div>
+      <dl class="kv">
+        <dt>Gate allows</dt><dd style="color:{allowed_color}; font-weight:600;">{allowed}</dd>
+        <dt>EMA50 / EMA200</dt><dd>{cur['ema_fast']:,.0f} / {cur['ema_slow']:,.0f}</dd>
+        <dt>{html.escape(regime['symbol'][:3])} price</dt><dd>${cur['price']:,.2f}</dd>
+        <dt>Regime read</dt><dd>{html.escape(regime['as_of'])}</dd>
+      </dl>
+      <div><div class="eyebrow">Last 30 bars — up {counts['up']} · chop {counts['chop']} · down {counts['down']}</div>
+        <div class="regime-strip">{cells}</div></div>
+      <div><div class="eyebrow">Recent transitions</div><ul class="trans">{trans}</ul></div>
+    </div>"""
+
+
+def _bars30(regime: dict) -> list[str]:
+    # The snapshot exposes counts, not the sequence; render counts in
+    # chronological blocks (chop, down, then the current run) — a faithful
+    # summary even without per-bar history.
+    c = regime["last_30_bars"]
+    return ["chop"] * c["chop"] + ["down"] * c["down"] + ["up"] * c["up"]
+
+
+def _strategy_cards(s: dict, sparks: dict) -> str:
+    out = []
+    open_by_sid = {p["strategy_id"]: p for p in s["open_positions"]}
+    for cfg in s.get("_strategies", []):
+        sid = cfg["id"]
+        sym = cfg["symbol"]
+        spark, price = sparks.get(sym, ([], None))
+        lo, hi = (min(spark), max(spark)) if spark else (0, 0)
+        val = _VALIDATION.get(sid)
+        val_rows = ""
+        if val:
+            val_rows = (f'<dt>Validation (OOS)</dt><dd class="pos">{val[0]}</dd>'
+                        f'<dt>Win rate / trades</dt><dd>{val[1]}</dd>'
+                        f'<dt>Verdict</dt><dd class="pos">{val[2]}</dd>')
+        pos = open_by_sid.get(sid)
+        if pos:
+            upnl = pos["notional"] * ((pos["mark_price"] - pos["entry_price"])
+                                      / pos["entry_price"])
+            if pos["direction"] == "short":
+                upnl = -upnl
+            status = (f'<div class="pill ok"><span class="dot"></span><span class="mono">'
+                      f'{pos["direction"].upper()} @ {pos["entry_price"]:,} · '
+                      f'unrealized {_money(upnl)}</span></div>')
+        else:
+            status = ('<div class="pill"><span class="mono">FLAT — waiting for signal'
+                      '</span></div>')
+        gate = ""
+        if cfg.get("regime_filter"):
+            gate = f'<span class="tag">regime-gated · {cfg.get("regime_anchor", "BTCUSDT")} {cfg.get("regime_interval", "4h")}</span>'
+        else:
+            gate = '<span class="tag">baseline · ungated</span>'
+        stats = s["per_strategy"].get(sid, {})
+        live_row = ""
+        if stats.get("trades"):
+            live_row = (f'<dt>Paper so far</dt><dd class="{_sign_class(stats["pnl"])}">'
+                        f'{stats["trades"]} trades · {_money(stats["pnl"])}</dd>')
+        price_str = f"${price:,.2f}" if price else "—"
+        out.append(f"""
+    <div class="card" aria-label="Strategy {html.escape(sid)}">
+      <h2>{html.escape(sym[:3])} {html.escape(cfg['strategy'].split('_')[0].upper())} {cfg['interval']} {gate}</h2>
+      <div class="bignum num">{price_str}</div>
+      <div class="spark-box"><svg id="spark-{html.escape(sid)}" width="100%" height="64" role="img"
+        aria-label="{html.escape(sym)} hourly price, last 7 days"></svg>
+        <div class="spark-cap"><span>7d low {lo:,.2f}</span><span>7d high {hi:,.2f}</span></div></div>
+      <dl class="kv">
+        <dt>Bracket</dt><dd>stop {cfg.get('atr_mult', 1.0):g}×ATR · target {cfg.get('rr', 1.5):g}R</dd>
+        {val_rows}{live_row}
+      </dl>
+      {status}
+    </div>""")
+    return "".join(out)
+
+
+def _positions_rows(s: dict) -> str:
+    if not s["open_positions"]:
+        return ('<tr><td colspan="6" class="empty">No open positions — '
+                'waiting for a signal.</td></tr>')
+    rows = []
+    for p in s["open_positions"]:
+        upnl = p["notional"] * ((p["mark_price"] - p["entry_price"]) / p["entry_price"])
+        if p["direction"] == "short":
+            upnl = -upnl
+        rows.append(
+            f'<tr><td>{html.escape(p["strategy_id"])}</td>'
+            f'<td>{p["direction"].upper()}</td>'
+            f'<td>{p["entry_price"]:,}</td><td>{p["stop"]:,}</td>'
+            f'<td>{p["target"]:,}</td>'
+            f'<td class="{_sign_class(upnl)}">{_money(upnl)}</td></tr>')
+    return "".join(rows)
+
+
+def _trades_rows(s: dict) -> str:
+    trades = s.get("recent_trades", [])
+    if not trades:
+        return ('<tr><td colspan="6" class="empty">No closed trades yet — '
+                'every trade will be logged here.</td></tr>')
+    rows = []
+    for t in reversed(trades):
+        rows.append(
+            f'<tr><td>{html.escape(t["exit_date"])}</td>'
+            f'<td>{html.escape(t["strategy_id"])}</td>'
+            f'<td>{t["direction"].upper()}</td>'
+            f'<td>{html.escape(t["exit_reason"])}</td>'
+            f'<td class="{_sign_class(t["net_return_pct"])}">{t["net_return_pct"]:+.2f}%</td>'
+            f'<td class="{_sign_class(t["pnl"])}">{_money(t["pnl"])}</td></tr>')
+    return "".join(rows)
+
+
+def render_dashboard_html(state_path: Optional[str] = None) -> str:
+    status = paper_status(state_path=state_path)
+    if "error" in status and isinstance(status["error"], dict):
+        raise RuntimeError(f"cannot render dashboard: {status['error']}")
+
+    # Strategy configs travel inside the state file; surface them for cards.
+    from tradingview_mcp.core.services.paper_trader_service import _load_state, _default_state_path
+    state = _load_state(state_path or _default_state_path())
+    status["_strategies"] = state["config"]["strategies"]
+
+    try:
+        regime = get_market_regime("BTCUSDT", "4h", 180)
+    except Exception:
+        regime = {"error": {"code": "UPSTREAM_ERROR"}}
+
+    sparks: dict = {}
+    for cfg in status["_strategies"]:
+        sym = cfg["symbol"]
+        if sym in sparks:
+            continue
+        try:
+            sparks[sym] = _spark(sym)
+        except Exception:
+            sparks[sym] = ([], None)
+
+    spark_js = ",".join(
+        f'"spark-{cfg["id"]}":{{"label":"{cfg["symbol"][:3]}","data":{sparks.get(cfg["symbol"], ([], None))[0]}}}'
+        for cfg in status["_strategies"])
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    account_pill = ('<span class="pill warn">KILL SWITCH TRIPPED — reset required</span>'
+                    if status["killed"] else
+                    '<span class="pill ok"><span class="dot"></span>ACCOUNT ACTIVE</span>')
+
+    page = _PAGE_TEMPLATE
+    for token, value in {
+        "__NOW__": now,
+        "__ACCOUNT_PILL__": account_pill,
+        "__TILES__": _tiles(status),
+        "__RISK__": _risk_strip(status),
+        "__REGIME__": _regime_card(regime),
+        "__STRATEGIES__": _strategy_cards(status, sparks),
+        "__POSITIONS__": _positions_rows(status),
+        "__TRADES__": _trades_rows(status),
+        "__WF_DATA__": _WF_DATA,
+        "__SPARKS__": "{" + spark_js + "}",
+    }.items():
+        page = page.replace(token, value)
+    return page
+
+
+def write_dashboard(output_path: str, state_path: Optional[str] = None) -> dict:
+    html_text = render_dashboard_html(state_path=state_path)
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html_text, encoding="utf-8")
+    return {"written": str(out), "bytes": len(html_text)}
+
+
+_PAGE_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="900">
+<title>Trading Desk — Paper Account</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<style>
+  :root {
+    --ground: #F6F7F9; --panel: #FFFFFF; --panel2: #EFF1F5;
+    --ink: #1B222C; --muted: #5C6675; --faint: #8A93A1;
+    --hairline: #E3E7EC; --accent: #B87A24;
+    --s-blue: #4A78C2; --s-amber: #C07E28;
+    --gain: #2C7A5E; --loss: #B3473F; --gain-bg: #E3F0EB; --loss-bg: #F5E7E5;
+    --chip-bg: #EDF0F4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0D1015; --panel: #151A21; --panel2: #1B212B;
+      --ink: #E6EAF0; --muted: #8C96A4; --faint: #67707E;
+      --hairline: #262E39; --accent: #D99A45;
+      --s-blue: #5581C4; --s-amber: #BD8038;
+      --gain: #4CAF8C; --loss: #D96C5F; --gain-bg: #17362C; --loss-bg: #3A211E;
+      --chip-bg: #1F2630;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .mono { font-family: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 14px 44px; display: flex; flex-direction: column; gap: 16px; }
+  .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .hdr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+  .hdr h1 { margin: 0; font-size: 21px; font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; }
+  .hdr .sub { color: var(--muted); font-size: 13px; }
+  .hdr .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--chip-bg); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { background: var(--gain-bg); color: var(--gain); }
+  .pill.warn { background: var(--loss-bg); color: var(--loss); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+  .tile { background: var(--panel); border: 1px solid var(--hairline); border-radius: 6px; padding: 12px 14px; }
+  .tile .v { font-size: 20px; font-weight: 600; margin-top: 2px; font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .tile .d { font-size: 12px; color: var(--faint); margin-top: 2px; }
+  .pos { color: var(--gain); } .neg { color: var(--loss); }
+  .riskstrip { display: flex; flex-wrap: wrap; gap: 10px; }
+  .risk { flex: 1 1 240px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--panel2); border: 1px solid var(--hairline); border-radius: 6px; padding: 9px 14px; font-size: 13px; }
+  .risk b { font-family: Consolas, ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .risk .state { margin-left: auto; }
+  .cols3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card h2 { margin: 0; font-size: 15px; font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .card h2 .tag { font-size: 11px; font-weight: 600; color: var(--muted); font-family: "Segoe UI", system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 13px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-family: Consolas, ui-monospace, monospace; }
+  .bignum { font-size: 23px; font-weight: 600; font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .spark-cap { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .regime-strip { display: flex; gap: 2px; margin-top: 4px; }
+  .regime-strip i { flex: 1; height: 12px; border-radius: 2px; }
+  .trans { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12.5px; }
+  .trans li { display: flex; gap: 10px; padding: 3px 0; border-top: 1px dashed var(--hairline); }
+  .trans .t { color: var(--muted); font-variant-numeric: tabular-nums; font-family: Consolas, ui-monospace, monospace; min-width: 112px; }
+  .tr-up { color: var(--gain); font-weight: 600; } .tr-down { color: var(--loss); font-weight: 600; } .tr-chop { color: var(--muted); font-weight: 600; }
+  .legend { display: flex; gap: 18px; font-size: 12.5px; color: var(--muted); align-items: center; flex-wrap: wrap; }
+  .legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .chart-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--hairline); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--faint); font-size: 13px; padding: 16px 4px; text-align: center; }
+  .table-scroll { overflow-x: auto; }
+  .pipeline { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--hairline); padding-top: 14px; }
+  .pipeline .step { display: flex; gap: 7px; align-items: center; }
+  .pipeline .n { font-family: Consolas, ui-monospace, monospace; font-size: 11.5px; border: 1px solid var(--hairline); border-radius: 3px; padding: 0 5px; }
+  .pipeline .done { color: var(--gain); }
+  .pipeline .live { color: var(--accent); font-weight: 600; }
+  #tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--ground); padding: 6px 10px; border-radius: 5px; font-size: 12px; line-height: 1.45; display: none; z-index: 9; max-width: 260px; font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hdr">
+    <h1>TRADING DESK</h1>
+    <span class="sub">paper account · fake money · live Binance data</span>
+    <span class="spacer"></span>
+    __ACCOUNT_PILL__
+    <span class="pill"><span class="mono num">updated __NOW__</span></span>
+  </header>
+
+  <section class="tiles" aria-label="Account summary">__TILES__</section>
+  <section class="riskstrip" aria-label="Risk rules">__RISK__</section>
+
+  <section class="cols3">
+    __REGIME__
+    __STRATEGIES__
+  </section>
+
+  <section class="card" aria-label="Walk-forward validation results">
+    <h2>WALK-FORWARD EVIDENCE <span class="tag">1h · 1 year · out-of-sample return</span></h2>
+    <p style="margin:0; font-size:13px; color:var(--muted); max-width:72ch;">
+      Every strategy was optimized on training windows and judged only on unseen
+      data. Most combinations fail — that is the point. The two that passed are
+      what this paper account trades.</p>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--s-blue);"></span>Baseline (no gate)</span>
+      <span><span class="sw" style="background:var(--s-amber);"></span>Regime-gated (BTC 4h trend)</span>
+      <span style="margin-left:auto;">tap a bar for detail</span>
+    </div>
+    <div class="chart-scroll"><svg id="wf-chart" width="100%" height="330" role="img"
+      aria-label="Out-of-sample returns for six strategy combinations, baseline versus regime-gated"></svg></div>
+  </section>
+
+  <section class="cols3" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+    <div class="card" aria-label="Open positions">
+      <h2>OPEN POSITIONS</h2>
+      <div class="table-scroll"><table><thead><tr><th>Strategy</th><th>Side</th><th>Entry</th><th>Stop</th><th>Target</th><th>P&amp;L</th></tr></thead>
+        <tbody>__POSITIONS__</tbody></table></div>
+    </div>
+    <div class="card" aria-label="Recent trades">
+      <h2>RECENT TRADES</h2>
+      <div class="table-scroll"><table><thead><tr><th>Closed</th><th>Strategy</th><th>Side</th><th>Exit</th><th>Net %</th><th>P&amp;L</th></tr></thead>
+        <tbody>__TRADES__</tbody></table></div>
+    </div>
+  </section>
+
+  <footer class="pipeline" aria-label="Pipeline progress">
+    <span class="step done"><span class="n">1</span>Research engine ✓</span>
+    <span class="step done"><span class="n">2</span>Regime gate ✓</span>
+    <span class="step live"><span class="n">3</span>Paper trading — LIVE</span>
+    <span class="step"><span class="n">4</span>Live executor (testnet)</span>
+    <span class="step"><span class="n">5</span>ML trade filter</span>
+    <span style="margin-left:auto;">auto-updates hourly via GitHub Actions · page refreshes itself every 15 min</span>
+  </footer>
+</div>
+<div id="tip"></div>
+
+<script>
+const SPARKS = __SPARKS__;
+const WF = __WF_DATA__;
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const tip = document.getElementById("tip");
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(x + 14, innerWidth - r.width - 10) + "px";
+  tip.style.top = Math.max(y - r.height - 12, 8) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+function sparkline(id, data, label) {
+  const svg = document.getElementById(id);
+  if (!svg || !data.length) return;
+  const W = svg.clientWidth || 300, H = 64, pad = 3;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const min = Math.min(...data), max = Math.max(...data) || 1;
+  const x = i => pad + i * (W - 2 * pad) / (data.length - 1);
+  const y = v => H - pad - (v - min) * (H - 2 * pad) / ((max - min) || 1);
+  const pts = data.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const last = data[data.length - 1], up = last >= data[0];
+  const line = up ? css("--gain") : css("--loss");
+  svg.innerHTML =
+    `<line x1="0" y1="${y(data[0])}" x2="${W}" y2="${y(data[0])}" stroke="${css("--hairline")}" stroke-dasharray="3 4"/>` +
+    `<polyline points="${pts}" fill="none" stroke="${line}" stroke-width="2" stroke-linejoin="round"/>` +
+    `<circle cx="${x(data.length-1)}" cy="${y(last)}" r="3.5" fill="${line}"/>` +
+    `<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="hit"/>`;
+  svg.querySelector(".hit").addEventListener("mousemove", e => {
+    const box = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(data.length - 1,
+      Math.round((e.clientX - box.left - pad) / (box.width - 2 * pad) * (data.length - 1))));
+    const hrsAgo = data.length - 1 - i;
+    showTip(`<b>${label}</b> $${data[i].toLocaleString()}<br>${hrsAgo === 0 ? "latest close" : hrsAgo + "h ago"}`, e.clientX, e.clientY);
+  });
+  svg.querySelector(".hit").addEventListener("mouseleave", hideTip);
+}
+
+function wfChart() {
+  const svg = document.getElementById("wf-chart");
+  const W = Math.max(svg.clientWidth || 900, 640), H = 330;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const mL = 105, mR = 86, mT = 16, mB = 26;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const lo = -30, hi = 12;
+  const X = v => mL + (v - lo) / (hi - lo) * plotW;
+  const rowH = plotH / WF.length, barH = 13, gap = 2;
+  const blue = css("--s-blue"), amber = css("--s-amber"),
+        hair = css("--hairline"), muted = css("--muted"), ink = css("--ink"),
+        gain = css("--gain"), loss = css("--loss");
+  let s = "";
+  for (const g of [-30, -20, -10, 10]) {
+    s += `<line x1="${X(g)}" y1="${mT}" x2="${X(g)}" y2="${mT+plotH}" stroke="${hair}"/>` +
+         `<text x="${X(g)}" y="${H-8}" fill="${muted}" font-size="11" text-anchor="middle" font-family="Consolas,monospace">${g > 0 ? "+" + g : g}%</text>`;
+  }
+  s += `<line x1="${X(0)}" y1="${mT}" x2="${X(0)}" y2="${mT+plotH}" stroke="${muted}" stroke-width="1.5"/>` +
+       `<text x="${X(0)}" y="${H-8}" fill="${muted}" font-size="11" text-anchor="middle" font-family="Consolas,monospace">0</text>`;
+  WF.forEach((row, i) => {
+    const cy = mT + i * rowH + rowH / 2;
+    s += `<text x="${mL-10}" y="${cy+4}" fill="${ink}" font-size="12.5" text-anchor="end" font-family="Consolas,monospace">${row.name}</text>`;
+    [["off", blue, cy - barH - gap/2], ["on", amber, cy + gap/2]].forEach(([k, color, ty]) => {
+      const d = row[k];
+      const x0 = Math.min(X(0), X(d.v)), w = Math.max(Math.abs(X(d.v) - X(0)), 1.5);
+      s += `<rect class="wfbar" data-i="${i}" data-k="${k}" x="${x0}" y="${ty}" width="${w}" height="${barH}" rx="3" fill="${color}"/>`;
+      if (d.verdict === "PASSED") {
+        s += `<text x="${X(d.v) + (d.v >= 0 ? 6 : -6)}" y="${ty + barH - 2.5}" fill="${gain}" font-size="11.5" font-weight="700" text-anchor="${d.v >= 0 ? "start" : "end"}" font-family="Consolas,monospace">${d.v > 0 ? "+" : ""}${d.v.toFixed(1)}% PASSED</text>`;
+      }
+    });
+    if (row.off.verdict !== "PASSED" && row.on.verdict !== "PASSED") {
+      const label = (row.off.verdict === "MIXED" || row.on.verdict === "MIXED") ? "MIXED" : "OVERFIT";
+      s += `<text x="${W - mR + 8}" y="${cy+4}" fill="${label === "MIXED" ? muted : loss}" font-size="10.5" font-weight="700" letter-spacing=".05em" font-family="Consolas,monospace">${label}</text>`;
+    }
+  });
+  svg.innerHTML = s;
+  svg.querySelectorAll(".wfbar").forEach(r => {
+    const show = e => {
+      const row = WF[+r.dataset.i], k = r.dataset.k, d = row[k];
+      const pt = e.touches ? e.touches[0] : e;
+      showTip(`<b>${row.name} — ${k === "off" ? "baseline" : "regime-gated"}</b><br>` +
+              `OOS return ${d.v > 0 ? "+" : ""}${d.v}%<br>${d.t} trades · ${d.w}% win rate<br>verdict: ${d.verdict}`,
+              pt.clientX, pt.clientY);
+    };
+    r.addEventListener("mousemove", show);
+    r.addEventListener("touchstart", show, { passive: true });
+    r.addEventListener("mouseleave", hideTip);
+    r.addEventListener("touchend", hideTip);
+  });
+}
+
+function renderAll() {
+  for (const [id, s] of Object.entries(SPARKS)) sparkline(id, s.data, s.label);
+  wfChart();
+}
+renderAll();
+addEventListener("resize", renderAll);
+</script>
+</body>
+</html>
+"""

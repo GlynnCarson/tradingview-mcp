@@ -34,7 +34,11 @@ def test_wrapped_tool_still_returns_the_original_result(monkeypatch):
 
 
 def test_offload_preserves_annotations_and_metadata():
+    # paper_reset/paper_step honestly declare readOnlyHint=False (they mutate
+    # the local simulation state file) — see test_tool_annotations.py.
+    local_state_tools = {"paper_reset", "paper_step"}
     for t in _tools():
         assert t.annotations is not None and t.annotations.title
-        assert t.annotations.readOnlyHint is True
+        expected_ro = t.name not in local_state_tools
+        assert t.annotations.readOnlyHint is expected_ro
         assert t.fn_metadata is not None  # validation schema still from the original signature
