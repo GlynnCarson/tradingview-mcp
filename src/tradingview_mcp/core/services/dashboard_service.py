@@ -252,6 +252,16 @@ def render_dashboard_html(state_path: Optional[str] = None) -> str:
                     if status["killed"] else
                     '<span class="pill ok"><span class="dot"></span>ACCOUNT ACTIVE</span>')
 
+    import json as _json
+    strats_js = _json.dumps([
+        {"id": c["id"], "symbol": c["symbol"], "strategy": c["strategy"],
+         "interval": c["interval"], "direction": c.get("direction", "both"),
+         "rr": c.get("rr", 1.5), "atr_mult": c.get("atr_mult", 1.0),
+         "regime_filter": bool(c.get("regime_filter")),
+         "regime_anchor": c.get("regime_anchor", "BTCUSDT"),
+         "regime_interval": c.get("regime_interval", "4h")}
+        for c in status["_strategies"]])
+
     page = _PAGE_TEMPLATE
     for token, value in {
         "__NOW__": now,
@@ -264,6 +274,7 @@ def render_dashboard_html(state_path: Optional[str] = None) -> str:
         "__TRADES__": _trades_rows(status),
         "__WF_DATA__": _WF_DATA,
         "__SPARKS__": "{" + spark_js + "}",
+        "__STRATS__": strats_js,
     }.items():
         page = page.replace(token, value)
     return page
@@ -371,6 +382,18 @@ _PAGE_TEMPLATE = r"""<!DOCTYPE html>
 
   <section class="tiles" aria-label="Account summary">__TILES__</section>
   <section class="riskstrip" aria-label="Risk rules">__RISK__</section>
+
+  <section class="card" aria-label="Live market">
+    <h2>LIVE MARKET
+      <span class="tag">fetched by your browser from Binance · candles are 1h</span>
+      <span class="pill ok" id="live-pill" style="margin-left:auto;"><span class="dot"></span><span id="live-label">LIVE</span></span>
+    </h2>
+    <p style="margin:0; font-size:12.5px; color:var(--muted); max-width:80ch;">
+      The bot only acts when a 1-hour candle <b>closes</b> (hourly tick at :07 UTC).
+      This panel is your live view between ticks: price, Bollinger bands, and the
+      exact close that would trigger an entry. <span id="live-count"></span></p>
+    <div id="live-blocks" style="display:flex; flex-direction:column; gap:18px;"></div>
+  </section>
 
   <section class="cols3">
     __REGIME__
@@ -513,6 +536,199 @@ function renderAll() {
 }
 renderAll();
 addEventListener("resize", renderAll);
+
+/* ── Live market layer — fetched client-side, refreshed every 30 s ────────── */
+const STRATS = __STRATS__;
+const HOSTS = ["https://data-api.binance.vision", "https://api.binance.com"];
+const REFRESH_S = 30;
+let liveState = {};
+
+async function klines(sym, interval, limit) {
+  for (const h of HOSTS) {
+    try {
+      const r = await fetch(`${h}/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`);
+      if (!r.ok) continue;
+      const rows = await r.json();
+      return rows.map(k => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+    } catch (e) { /* try mirror */ }
+  }
+  throw new Error("Binance unreachable");
+}
+const smaAt = (a, i, n) => { let s = 0; for (let j = i - n + 1; j <= i; j++) s += a[j]; return s / n; };
+function bollinger(closes, n = 20, mult = 2) {
+  const up = [], mid = [], lo = [], bbw = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < n - 1) { up.push(null); mid.push(null); lo.push(null); bbw.push(null); continue; }
+    const m = smaAt(closes, i, n);
+    let v = 0; for (let j = i - n + 1; j <= i; j++) v += (closes[j] - m) ** 2;
+    const sd = Math.sqrt(v / n);
+    up.push(m + mult * sd); mid.push(m); lo.push(m - mult * sd);
+    bbw.push(m ? (2 * mult * sd) / m : null);
+  }
+  return { up, mid, lo, bbw };
+}
+function emaSeries(closes, n) {
+  const k = 2 / (n + 1), out = [];
+  let e = null;
+  for (let i = 0; i < closes.length; i++) {
+    if (i === n - 1) e = smaAt(closes, i, n);
+    else if (i >= n) e = closes[i] * k + e * (1 - k);
+    out.push(i >= n - 1 ? e : null);
+  }
+  return out;
+}
+function squeezeRead(closedCloses, bb, win = 60, arm = 5) {
+  const bbw = bb.bbw;
+  const n = bbw.length;
+  for (let back = 0; back < arm; back++) {
+    const i = n - 1 - back;
+    if (i < win || bbw[i] == null) continue;
+    const window = bbw.slice(i - win, i).filter(v => v != null);
+    if (window.length && bbw[i] <= Math.min(...window)) {
+      return { armed: true, barsAgo: back, bbw: bbw[i] };
+    }
+  }
+  const cur = bbw[n - 1], window = bbw.slice(Math.max(0, n - 1 - win), n - 1).filter(v => v != null);
+  return { armed: false, bbw: cur, low60: window.length ? Math.min(...window) : null };
+}
+
+function candleChart(el, candles, bb, triggers) {
+  const W = Math.max(el.clientWidth || 800, 340), H = 240;
+  const pad = { l: 8, r: 74, t: 10, b: 20 };
+  const view = candles.slice(-110);
+  const off = candles.length - view.length;
+  const lows = view.map(c => c.l), highs = view.map(c => c.h);
+  let lo = Math.min(...lows), hi = Math.max(...highs);
+  for (const t of triggers) { if (t.px) { lo = Math.min(lo, t.px); hi = Math.max(hi, t.px); } }
+  const span = (hi - lo) || 1; lo -= span * .04; hi += span * .04;
+  const X = i => pad.l + i * (W - pad.l - pad.r) / view.length;
+  const Y = v => pad.t + (hi - v) * (H - pad.t - pad.b) / (hi - lo);
+  const cw = Math.max(2, (W - pad.l - pad.r) / view.length - 2);
+  const gain = css("--gain"), loss = css("--loss"), hair = css("--hairline"),
+        muted = css("--muted"), blue = css("--s-blue");
+  let s = "";
+  for (const frac of [0.25, 0.5, 0.75]) {
+    const v = lo + (hi - lo) * frac;
+    s += `<line x1="${pad.l}" y1="${Y(v)}" x2="${W-pad.r}" y2="${Y(v)}" stroke="${hair}"/>` +
+         `<text x="${W-pad.r+6}" y="${Y(v)+4}" fill="${muted}" font-size="10.5" font-family="Consolas,monospace">${v.toLocaleString(undefined,{maximumFractionDigits:v<100?2:0})}</text>`;
+  }
+  const band = (arr, dash) => {
+    let p = "";
+    arr.forEach((v, i) => { const gi = i + off; if (arr[i] != null) p += `${p ? "L" : "M"}${X(i)+cw/2},${Y(v)} `; });
+    return `<path d="${p}" fill="none" stroke="${blue}" stroke-width="1.3" ${dash ? 'stroke-dasharray="4 4"' : ""} opacity=".75"/>`;
+  };
+  const bbV = k => bb[k].slice(-view.length);
+  s += band(bbV("up")) + band(bbV("lo")) + band(bbV("mid"), true);
+  view.forEach((c, i) => {
+    const x = X(i), up = c.c >= c.o, col = up ? gain : loss;
+    const yO = Y(c.o), yC = Y(c.c);
+    s += `<line x1="${x+cw/2}" y1="${Y(c.h)}" x2="${x+cw/2}" y2="${Y(c.l)}" stroke="${col}" stroke-width="1"/>` +
+         `<rect x="${x}" y="${Math.min(yO,yC)}" width="${cw}" height="${Math.max(Math.abs(yO-yC),1.2)}" fill="${col}" rx="1"/>`;
+  });
+  const lastX = X(view.length - 1) + cw / 2;
+  const last = view[view.length - 1];
+  s += `<circle cx="${lastX}" cy="${Y(last.c)}" r="3" fill="${last.c>=last.o?gain:loss}"/>`;
+  for (const t of triggers) {
+    if (!t.px) continue;
+    const col = t.side === "LONG" ? gain : loss;
+    s += `<line x1="${pad.l}" y1="${Y(t.px)}" x2="${W-pad.r}" y2="${Y(t.px)}" stroke="${col}" stroke-width="1.4" stroke-dasharray="7 5"/>` +
+         `<text x="${W-pad.r+6}" y="${Y(t.px)+4}" fill="${col}" font-size="10.5" font-weight="700" font-family="Consolas,monospace">${t.side} ${t.px.toLocaleString(undefined,{maximumFractionDigits:t.px<100?2:0})}</text>`;
+  }
+  s += `<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="chit"/>`;
+  el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  el.innerHTML = s;
+  el.querySelector(".chit").addEventListener("mousemove", e => {
+    const box = el.getBoundingClientRect();
+    const i = Math.max(0, Math.min(view.length - 1, Math.floor((e.clientX - box.left - pad.l) / ((box.width - pad.l - pad.r) / view.length))));
+    const c = view[i];
+    const d = new Date(c.t).toISOString().slice(5, 16).replace("T", " ");
+    const partial = i === view.length - 1 ? " · <i>forming</i>" : "";
+    showTip(`<b>${d} UTC${partial}</b><br>O ${c.o.toLocaleString()} H ${c.h.toLocaleString()}<br>L ${c.l.toLocaleString()} C ${c.c.toLocaleString()}`, e.clientX, e.clientY);
+  });
+  el.querySelector(".chit").addEventListener("mouseleave", hideTip);
+}
+
+async function liveRegime(anchor, interval) {
+  const rows = await klines(anchor, interval, 320);
+  rows.pop(); // drop forming candle — same rule as the bot
+  const closes = rows.map(c => c.c);
+  const f = emaSeries(closes, 50).pop(), s = emaSeries(closes, 200).pop();
+  if (f == null || s == null) return null;
+  const r = f / s - 1;
+  return r > 0.002 ? "up" : (r < -0.002 ? "down" : "chop");
+}
+
+function fmtPct(x) { return (x >= 0 ? "+" : "") + x.toFixed(2) + "%"; }
+
+async function refreshLive() {
+  const blocks = document.getElementById("live-blocks");
+  const bySymbol = {};
+  for (const st of STRATS) (bySymbol[st.symbol] = bySymbol[st.symbol] || []).push(st);
+  let regimeCache = {};
+  for (const [sym, strats] of Object.entries(bySymbol)) {
+    let holder = document.getElementById("lb-" + sym);
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.id = "lb-" + sym;
+      holder.innerHTML = `<div class="watch" id="watch-${sym}" style="font-size:13px; line-height:1.65;"></div>
+        <div class="chart-scroll" style="margin-top:6px;"><svg id="chart-${sym}" width="100%" height="240"></svg></div>`;
+      blocks.appendChild(holder);
+    }
+    try {
+      const candles = await klines(sym, "1h", 180);
+      const closed = candles.slice(0, -1);
+      const closes = closed.map(c => c.c);
+      const bb = bollinger(closes);
+      const sq = squeezeRead(closes, bb);
+      const upT = bb.up[bb.up.length - 1], loT = bb.lo[bb.lo.length - 1];
+      const px = candles[candles.length - 1].c;
+      let gateTxt = "", allowLong = true, allowShort = true;
+      const gated = strats.find(s => s.regime_filter);
+      if (gated) {
+        const key = gated.regime_anchor + gated.regime_interval;
+        if (!(key in regimeCache)) regimeCache[key] = await liveRegime(gated.regime_anchor, gated.regime_interval);
+        const tr = regimeCache[key];
+        allowLong = tr === "up"; allowShort = tr === "down";
+        const col = tr === "up" ? "var(--gain)" : (tr === "down" ? "var(--loss)" : "var(--muted)");
+        gateTxt = ` · gate: <b style="color:${col}">${gated.regime_anchor.slice(0,3)} ${gated.regime_interval} ${String(tr).toUpperCase()}</b>` +
+                  (tr === "up" ? " → longs only" : tr === "down" ? " → shorts only" : " → all entries blocked");
+      }
+      const dLong = (upT - px) / px * 100, dShort = (loT - px) / px * 100;
+      let waitTxt;
+      if (sq.armed) {
+        const longLeg = (!gated || allowLong) ? `1h close <b style="color:var(--gain)">above ${upT.toLocaleString(undefined,{maximumFractionDigits:upT<100?2:0})}</b> → LONG (${fmtPct(dLong)} away)` : "";
+        const shortLeg = (!gated || allowShort) ? `1h close <b style="color:var(--loss)">below ${loT.toLocaleString(undefined,{maximumFractionDigits:loT<100?2:0})}</b> → SHORT (${fmtPct(dShort)} away)` : "";
+        const legs = [longLeg, shortLeg].filter(Boolean).join(" or ");
+        waitTxt = `<span class="pill ok"><span class="dot"></span>SQUEEZE ARMED</span> (band width at 60-bar low ${sq.barsAgo === 0 ? "this bar" : sq.barsAgo + " bar" + (sq.barsAgo > 1 ? "s" : "") + " ago"}) — waiting for ${legs || "<i>nothing (gate blocks both sides)</i>"}`;
+      } else {
+        const ratio = sq.low60 ? (sq.bbw / sq.low60) : null;
+        waitTxt = `<span class="pill">SQUEEZE NOT ARMED</span> — band width ${sq.bbw ? (sq.bbw*100).toFixed(2) : "?"}% vs 60-bar low ${(sq.low60*100).toFixed(2)}%` +
+                  (ratio ? ` (${ratio.toFixed(1)}× the low; volatility must compress first — no entry can trigger yet)` : "");
+      }
+      document.getElementById("watch-" + sym).innerHTML =
+        `<b class="mono">${sym.slice(0,3)}/USDT</b> <span class="bignum num" style="font-size:19px;">$${px.toLocaleString(undefined,{maximumFractionDigits:px<100?2:0})}</span>${gateTxt}<br>${waitTxt}`;
+      candleChart(document.getElementById("chart-" + sym), candles, bb,
+        [{ side: "LONG", px: (!gated || allowLong) ? upT : null },
+         { side: "SHORT", px: (!gated || allowShort) ? loT : null }]);
+      liveState[sym] = true;
+    } catch (e) {
+      document.getElementById("watch-" + sym).innerHTML =
+        `<b class="mono">${sym}</b> — <span style="color:var(--muted)">live data unavailable (${e.message}); retrying…</span>`;
+    }
+  }
+  const ok = Object.values(liveState).some(Boolean);
+  document.getElementById("live-pill").className = "pill " + (ok ? "ok" : "warn");
+  document.getElementById("live-label").textContent = ok ? "LIVE" : "RECONNECTING";
+}
+
+let nextIn = 0;
+setInterval(() => {
+  nextIn -= 1;
+  if (nextIn <= 0) { nextIn = REFRESH_S; refreshLive(); }
+  const el = document.getElementById("live-count");
+  if (el) el.textContent = `Live refresh in ${nextIn}s.`;
+}, 1000);
+refreshLive(); nextIn = REFRESH_S;
 </script>
 </body>
 </html>
