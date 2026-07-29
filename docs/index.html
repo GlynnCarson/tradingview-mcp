@@ -87,7 +87,7 @@
     <span class="sub">paper account · fake money · live Binance data</span>
     <span class="spacer"></span>
     <span class="pill ok"><span class="dot"></span>ACCOUNT ACTIVE</span>
-    <span class="pill"><span class="mono num">updated 2026-07-29 15:49 UTC</span></span>
+    <span class="pill"><span class="mono num">updated 2026-07-29 16:09 UTC</span></span>
   </header>
 
   <section class="tiles" aria-label="Account summary">
@@ -102,17 +102,29 @@
     <div class="risk">Daily loss halt <b>−3%</b> · today <b>$0.00</b><span class="state pill ok"><span class="dot"></span>clear</span></div>
     <div class="risk">Kill switch <b>−15% from peak</b> · now <b>-0.0%</b><span class="state pill ok"><span class="dot"></span>clear</span></div></section>
 
+  <section class="card" aria-label="Live market">
+    <h2>LIVE MARKET
+      <span class="tag">fetched by your browser from Binance · candles are 1h</span>
+      <span class="pill ok" id="live-pill" style="margin-left:auto;"><span class="dot"></span><span id="live-label">LIVE</span></span>
+    </h2>
+    <p style="margin:0; font-size:12.5px; color:var(--muted); max-width:80ch;">
+      The bot only acts when a 1-hour candle <b>closes</b> (hourly tick at :07 UTC).
+      This panel is your live view between ticks: price, Bollinger bands, and the
+      exact close that would trigger an entry. <span id="live-count"></span></p>
+    <div id="live-blocks" style="display:flex; flex-direction:column; gap:18px;"></div>
+  </section>
+
   <section class="cols3">
     
     <div class="card" aria-label="Market regime">
       <h2>MARKET REGIME <span class="tag">BTCUSDT · 4h anchor</span></h2>
       <div><span class="pill ok" style="font-size:14px; padding:5px 14px;"><span class="dot"></span>TREND UP</span>
-        <span class="pill" style="margin-left:6px;">volatility high</span></div>
+        <span class="pill" style="margin-left:6px;">volatility low</span></div>
       <dl class="kv">
         <dt>Gate allows</dt><dd style="color:var(--gain); font-weight:600;">LONG only</dd>
-        <dt>EMA50 / EMA200</dt><dd>64,499 / 64,308</dd>
-        <dt>BTC price</dt><dd>$64,000.01</dd>
-        <dt>Regime read</dt><dd>2026-07-29 12:00</dd>
+        <dt>EMA50 / EMA200</dt><dd>64,477 / 64,305</dd>
+        <dt>BTC price</dt><dd>$63,980.99</dd>
+        <dt>Regime read</dt><dd>2026-07-29 16:00</dd>
       </dl>
       <div><div class="eyebrow">Last 30 bars — up 30 · chop 0 · down 0</div>
         <div class="regime-strip"><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i><i style="background:var(--gain)"></i></div></div>
@@ -121,10 +133,10 @@
     
     <div class="card" aria-label="Strategy btc_squeeze_1h">
       <h2>BTC SQUEEZE 1h <span class="tag">baseline · ungated</span></h2>
-      <div class="bignum num">$64,000.00</div>
+      <div class="bignum num">$63,980.98</div>
       <div class="spark-box"><svg id="spark-btc_squeeze_1h" width="100%" height="64" role="img"
         aria-label="BTCUSDT hourly price, last 7 days"></svg>
-        <div class="spark-cap"><span>7d low 63,104.00</span><span>7d high 66,229.01</span></div></div>
+        <div class="spark-cap"><span>7d low 63,104.00</span><span>7d high 66,114.49</span></div></div>
       <dl class="kv">
         <dt>Bracket</dt><dd>stop 2×ATR · target 1.5R</dd>
         <dt>Validation (OOS)</dt><dd class="pos">+4.8% · PF 1.51</dd><dt>Win rate / trades</dt><dd>52.4% / 21</dd><dt>Verdict</dt><dd class="pos">PASSED walk-forward</dd>
@@ -133,7 +145,7 @@
     </div>
     <div class="card" aria-label="Strategy eth_squeeze_1h_gated">
       <h2>ETH SQUEEZE 1h <span class="tag">regime-gated · BTCUSDT 4h</span></h2>
-      <div class="bignum num">$1,891.59</div>
+      <div class="bignum num">$1,892.83</div>
       <div class="spark-box"><svg id="spark-eth_squeeze_1h_gated" width="100%" height="64" role="img"
         aria-label="ETHUSDT hourly price, last 7 days"></svg>
         <div class="spark-cap"><span>7d low 1,853.80</span><span>7d high 1,968.45</span></div></div>
@@ -185,7 +197,7 @@
 <div id="tip"></div>
 
 <script>
-const SPARKS = {"spark-btc_squeeze_1h":{"label":"BTC","data":[66229.01, 66024.03, 65895.46, 65923.19, 65919.68, 66072.47, 66044.17, 66114.49, 66058.19, 65830.0, 65805.34, 65662.53, 65616.48, 65691.01, 65790.0, 65442.13, 65633.0, 65638.92, 65740.0, 65555.21, 65167.04, 64880.0, 64909.99, 64958.36, 64756.84, 64681.27, 64869.12, 64846.94, 65147.5, 65169.81, 65195.43, 65098.97, 64973.99, 65086.0, 65116.99, 65456.7, 65318.0, 65325.0, 65472.0, 65499.95, 65302.18, 65113.13, 64950.0, 65083.43, 64780.01, 64155.46, 64055.12, 64093.85, 63958.0, 64180.0, 64272.0, 64225.32, 64170.23, 64155.0, 64169.01, 64139.99, 64073.61, 64068.01, 64052.0, 64085.36, 64181.46, 64024.0, 64010.0, 64003.2, 63876.06, 63999.99, 64070.0, 64064.01, 64123.8, 64172.0, 64214.04, 64182.0, 64206.6, 64267.4, 64415.99, 64388.38, 64339.75, 64344.02, 64412.0, 64375.0, 64506.99, 64462.0, 64527.56, 64557.0, 64530.06, 64417.69, 64438.0, 64370.0, 64480.01, 64538.0, 64515.4, 64507.35, 64466.67, 64518.0, 64712.99, 64768.0, 64734.17, 64697.2, 64734.38, 64695.52, 64649.04, 64858.02, 65412.68, 65399.99, 65131.95, 65206.21, 65172.0, 65284.0, 65282.8, 65468.38, 65416.76, 65221.99, 65162.98, 65262.17, 65333.35, 65100.79, 65086.0, 65217.37, 64687.45, 64554.01, 64898.52, 65019.81, 64878.0, 64984.0, 64960.65, 64821.25, 63792.0, 63755.86, 63487.88, 63230.83, 63185.59, 63343.83, 63350.95, 63451.61, 63640.63, 63505.99, 63428.08, 63393.99, 63473.47, 63450.0, 63546.65, 63104.0, 63412.45, 63928.47, 64043.26, 63685.88, 63734.49, 63904.0, 63917.55, 63972.44, 63783.71, 63915.0, 63953.99, 63705.06, 63979.96, 63753.03, 63968.34, 64067.32, 64435.62, 64561.0, 64417.31, 64698.0, 64469.83, 64507.54, 64276.81, 64664.7, 64108.01, 64000.0]},"spark-eth_squeeze_1h_gated":{"label":"ETH","data":[1949.84, 1938.53, 1930.69, 1925.13, 1926.76, 1938.76, 1938.42, 1934.25, 1932.37, 1928.39, 1927.6, 1920.55, 1919.74, 1922.77, 1925.39, 1915.65, 1926.54, 1924.36, 1928.14, 1926.04, 1904.64, 1898.72, 1896.43, 1895.23, 1887.95, 1878.31, 1881.19, 1875.65, 1885.98, 1882.72, 1883.42, 1878.38, 1871.47, 1872.76, 1869.58, 1880.67, 1876.12, 1880.97, 1888.13, 1895.98, 1888.07, 1888.07, 1883.82, 1883.93, 1872.65, 1857.6, 1862.9, 1861.81, 1857.47, 1866.53, 1862.72, 1863.83, 1860.9, 1857.51, 1859.49, 1861.44, 1860.34, 1860.0, 1859.45, 1858.74, 1861.28, 1858.42, 1858.55, 1856.02, 1853.8, 1858.34, 1858.62, 1857.75, 1860.32, 1867.24, 1868.68, 1867.88, 1867.99, 1873.06, 1875.48, 1874.76, 1872.23, 1872.65, 1875.82, 1874.89, 1881.05, 1878.68, 1880.97, 1882.21, 1886.26, 1883.4, 1884.95, 1881.56, 1881.42, 1883.8, 1886.22, 1885.87, 1886.57, 1886.62, 1898.59, 1914.63, 1916.2, 1911.23, 1914.49, 1914.2, 1913.8, 1925.91, 1949.81, 1954.72, 1942.54, 1948.2, 1943.1, 1949.64, 1953.43, 1965.65, 1968.45, 1964.36, 1964.25, 1965.19, 1967.43, 1959.67, 1957.59, 1961.16, 1932.3, 1927.75, 1940.57, 1943.71, 1939.2, 1948.31, 1946.87, 1941.9, 1893.6, 1892.53, 1878.86, 1875.9, 1876.0, 1881.38, 1879.18, 1883.16, 1888.62, 1883.83, 1884.5, 1876.44, 1878.79, 1876.68, 1892.48, 1874.08, 1888.95, 1920.02, 1925.92, 1901.89, 1911.22, 1922.23, 1918.57, 1923.95, 1911.9, 1922.23, 1917.27, 1905.7, 1911.1, 1892.7, 1905.52, 1912.54, 1920.18, 1924.71, 1915.08, 1922.31, 1912.16, 1915.26, 1905.23, 1909.24, 1895.23, 1891.59]}};
+const SPARKS = {"spark-btc_squeeze_1h":{"label":"BTC","data":[66024.03, 65895.46, 65923.19, 65919.68, 66072.47, 66044.17, 66114.49, 66058.19, 65830.0, 65805.34, 65662.53, 65616.48, 65691.01, 65790.0, 65442.13, 65633.0, 65638.92, 65740.0, 65555.21, 65167.04, 64880.0, 64909.99, 64958.36, 64756.84, 64681.27, 64869.12, 64846.94, 65147.5, 65169.81, 65195.43, 65098.97, 64973.99, 65086.0, 65116.99, 65456.7, 65318.0, 65325.0, 65472.0, 65499.95, 65302.18, 65113.13, 64950.0, 65083.43, 64780.01, 64155.46, 64055.12, 64093.85, 63958.0, 64180.0, 64272.0, 64225.32, 64170.23, 64155.0, 64169.01, 64139.99, 64073.61, 64068.01, 64052.0, 64085.36, 64181.46, 64024.0, 64010.0, 64003.2, 63876.06, 63999.99, 64070.0, 64064.01, 64123.8, 64172.0, 64214.04, 64182.0, 64206.6, 64267.4, 64415.99, 64388.38, 64339.75, 64344.02, 64412.0, 64375.0, 64506.99, 64462.0, 64527.56, 64557.0, 64530.06, 64417.69, 64438.0, 64370.0, 64480.01, 64538.0, 64515.4, 64507.35, 64466.67, 64518.0, 64712.99, 64768.0, 64734.17, 64697.2, 64734.38, 64695.52, 64649.04, 64858.02, 65412.68, 65399.99, 65131.95, 65206.21, 65172.0, 65284.0, 65282.8, 65468.38, 65416.76, 65221.99, 65162.98, 65262.17, 65333.35, 65100.79, 65086.0, 65217.37, 64687.45, 64554.01, 64898.52, 65019.81, 64878.0, 64984.0, 64960.65, 64821.25, 63792.0, 63755.86, 63487.88, 63230.83, 63185.59, 63343.83, 63350.95, 63451.61, 63640.63, 63505.99, 63428.08, 63393.99, 63473.47, 63450.0, 63546.65, 63104.0, 63412.45, 63928.47, 64043.26, 63685.88, 63734.49, 63904.0, 63917.55, 63972.44, 63783.71, 63915.0, 63953.99, 63705.06, 63979.96, 63753.03, 63968.34, 64067.32, 64435.62, 64561.0, 64417.31, 64698.0, 64469.83, 64507.54, 64276.81, 64664.7, 64108.01, 63964.01, 63980.98]},"spark-eth_squeeze_1h_gated":{"label":"ETH","data":[1938.53, 1930.69, 1925.13, 1926.76, 1938.76, 1938.42, 1934.25, 1932.37, 1928.39, 1927.6, 1920.55, 1919.74, 1922.77, 1925.39, 1915.65, 1926.54, 1924.36, 1928.14, 1926.04, 1904.64, 1898.72, 1896.43, 1895.23, 1887.95, 1878.31, 1881.19, 1875.65, 1885.98, 1882.72, 1883.42, 1878.38, 1871.47, 1872.76, 1869.58, 1880.67, 1876.12, 1880.97, 1888.13, 1895.98, 1888.07, 1888.07, 1883.82, 1883.93, 1872.65, 1857.6, 1862.9, 1861.81, 1857.47, 1866.53, 1862.72, 1863.83, 1860.9, 1857.51, 1859.49, 1861.44, 1860.34, 1860.0, 1859.45, 1858.74, 1861.28, 1858.42, 1858.55, 1856.02, 1853.8, 1858.34, 1858.62, 1857.75, 1860.32, 1867.24, 1868.68, 1867.88, 1867.99, 1873.06, 1875.48, 1874.76, 1872.23, 1872.65, 1875.82, 1874.89, 1881.05, 1878.68, 1880.97, 1882.21, 1886.26, 1883.4, 1884.95, 1881.56, 1881.42, 1883.8, 1886.22, 1885.87, 1886.57, 1886.62, 1898.59, 1914.63, 1916.2, 1911.23, 1914.49, 1914.2, 1913.8, 1925.91, 1949.81, 1954.72, 1942.54, 1948.2, 1943.1, 1949.64, 1953.43, 1965.65, 1968.45, 1964.36, 1964.25, 1965.19, 1967.43, 1959.67, 1957.59, 1961.16, 1932.3, 1927.75, 1940.57, 1943.71, 1939.2, 1948.31, 1946.87, 1941.9, 1893.6, 1892.53, 1878.86, 1875.9, 1876.0, 1881.38, 1879.18, 1883.16, 1888.62, 1883.83, 1884.5, 1876.44, 1878.79, 1876.68, 1892.48, 1874.08, 1888.95, 1920.02, 1925.92, 1901.89, 1911.22, 1922.23, 1918.57, 1923.95, 1911.9, 1922.23, 1917.27, 1905.7, 1911.1, 1892.7, 1905.52, 1912.54, 1920.18, 1924.71, 1915.08, 1922.31, 1912.16, 1915.26, 1905.23, 1909.24, 1895.23, 1892.11, 1892.83]}};
 const WF = [
   {"name":"BTC squeeze","off":{"v":4.80,"t":21,"w":52.4,"verdict":"PASSED"},"on":{"v":-0.74,"t":5,"w":60.0,"verdict":"OVERFIT"}},
   {"name":"ETH squeeze","off":{"v":-0.18,"t":26,"w":42.3,"verdict":"OVERFIT"},"on":{"v":6.69,"t":11,"w":63.6,"verdict":"PASSED"}},
@@ -288,6 +300,199 @@ function renderAll() {
 }
 renderAll();
 addEventListener("resize", renderAll);
+
+/* ── Live market layer — fetched client-side, refreshed every 30 s ────────── */
+const STRATS = [{"id": "btc_squeeze_1h", "symbol": "BTCUSDT", "strategy": "squeeze_breakout", "interval": "1h", "direction": "both", "rr": 1.5, "atr_mult": 2.0, "regime_filter": false, "regime_anchor": "BTCUSDT", "regime_interval": "4h"}, {"id": "eth_squeeze_1h_gated", "symbol": "ETHUSDT", "strategy": "squeeze_breakout", "interval": "1h", "direction": "both", "rr": 2.0, "atr_mult": 2.0, "regime_filter": true, "regime_anchor": "BTCUSDT", "regime_interval": "4h"}];
+const HOSTS = ["https://data-api.binance.vision", "https://api.binance.com"];
+const REFRESH_S = 30;
+let liveState = {};
+
+async function klines(sym, interval, limit) {
+  for (const h of HOSTS) {
+    try {
+      const r = await fetch(`${h}/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`);
+      if (!r.ok) continue;
+      const rows = await r.json();
+      return rows.map(k => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+    } catch (e) { /* try mirror */ }
+  }
+  throw new Error("Binance unreachable");
+}
+const smaAt = (a, i, n) => { let s = 0; for (let j = i - n + 1; j <= i; j++) s += a[j]; return s / n; };
+function bollinger(closes, n = 20, mult = 2) {
+  const up = [], mid = [], lo = [], bbw = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < n - 1) { up.push(null); mid.push(null); lo.push(null); bbw.push(null); continue; }
+    const m = smaAt(closes, i, n);
+    let v = 0; for (let j = i - n + 1; j <= i; j++) v += (closes[j] - m) ** 2;
+    const sd = Math.sqrt(v / n);
+    up.push(m + mult * sd); mid.push(m); lo.push(m - mult * sd);
+    bbw.push(m ? (2 * mult * sd) / m : null);
+  }
+  return { up, mid, lo, bbw };
+}
+function emaSeries(closes, n) {
+  const k = 2 / (n + 1), out = [];
+  let e = null;
+  for (let i = 0; i < closes.length; i++) {
+    if (i === n - 1) e = smaAt(closes, i, n);
+    else if (i >= n) e = closes[i] * k + e * (1 - k);
+    out.push(i >= n - 1 ? e : null);
+  }
+  return out;
+}
+function squeezeRead(closedCloses, bb, win = 60, arm = 5) {
+  const bbw = bb.bbw;
+  const n = bbw.length;
+  for (let back = 0; back < arm; back++) {
+    const i = n - 1 - back;
+    if (i < win || bbw[i] == null) continue;
+    const window = bbw.slice(i - win, i).filter(v => v != null);
+    if (window.length && bbw[i] <= Math.min(...window)) {
+      return { armed: true, barsAgo: back, bbw: bbw[i] };
+    }
+  }
+  const cur = bbw[n - 1], window = bbw.slice(Math.max(0, n - 1 - win), n - 1).filter(v => v != null);
+  return { armed: false, bbw: cur, low60: window.length ? Math.min(...window) : null };
+}
+
+function candleChart(el, candles, bb, triggers) {
+  const W = Math.max(el.clientWidth || 800, 340), H = 240;
+  const pad = { l: 8, r: 74, t: 10, b: 20 };
+  const view = candles.slice(-110);
+  const off = candles.length - view.length;
+  const lows = view.map(c => c.l), highs = view.map(c => c.h);
+  let lo = Math.min(...lows), hi = Math.max(...highs);
+  for (const t of triggers) { if (t.px) { lo = Math.min(lo, t.px); hi = Math.max(hi, t.px); } }
+  const span = (hi - lo) || 1; lo -= span * .04; hi += span * .04;
+  const X = i => pad.l + i * (W - pad.l - pad.r) / view.length;
+  const Y = v => pad.t + (hi - v) * (H - pad.t - pad.b) / (hi - lo);
+  const cw = Math.max(2, (W - pad.l - pad.r) / view.length - 2);
+  const gain = css("--gain"), loss = css("--loss"), hair = css("--hairline"),
+        muted = css("--muted"), blue = css("--s-blue");
+  let s = "";
+  for (const frac of [0.25, 0.5, 0.75]) {
+    const v = lo + (hi - lo) * frac;
+    s += `<line x1="${pad.l}" y1="${Y(v)}" x2="${W-pad.r}" y2="${Y(v)}" stroke="${hair}"/>` +
+         `<text x="${W-pad.r+6}" y="${Y(v)+4}" fill="${muted}" font-size="10.5" font-family="Consolas,monospace">${v.toLocaleString(undefined,{maximumFractionDigits:v<100?2:0})}</text>`;
+  }
+  const band = (arr, dash) => {
+    let p = "";
+    arr.forEach((v, i) => { const gi = i + off; if (arr[i] != null) p += `${p ? "L" : "M"}${X(i)+cw/2},${Y(v)} `; });
+    return `<path d="${p}" fill="none" stroke="${blue}" stroke-width="1.3" ${dash ? 'stroke-dasharray="4 4"' : ""} opacity=".75"/>`;
+  };
+  const bbV = k => bb[k].slice(-view.length);
+  s += band(bbV("up")) + band(bbV("lo")) + band(bbV("mid"), true);
+  view.forEach((c, i) => {
+    const x = X(i), up = c.c >= c.o, col = up ? gain : loss;
+    const yO = Y(c.o), yC = Y(c.c);
+    s += `<line x1="${x+cw/2}" y1="${Y(c.h)}" x2="${x+cw/2}" y2="${Y(c.l)}" stroke="${col}" stroke-width="1"/>` +
+         `<rect x="${x}" y="${Math.min(yO,yC)}" width="${cw}" height="${Math.max(Math.abs(yO-yC),1.2)}" fill="${col}" rx="1"/>`;
+  });
+  const lastX = X(view.length - 1) + cw / 2;
+  const last = view[view.length - 1];
+  s += `<circle cx="${lastX}" cy="${Y(last.c)}" r="3" fill="${last.c>=last.o?gain:loss}"/>`;
+  for (const t of triggers) {
+    if (!t.px) continue;
+    const col = t.side === "LONG" ? gain : loss;
+    s += `<line x1="${pad.l}" y1="${Y(t.px)}" x2="${W-pad.r}" y2="${Y(t.px)}" stroke="${col}" stroke-width="1.4" stroke-dasharray="7 5"/>` +
+         `<text x="${W-pad.r+6}" y="${Y(t.px)+4}" fill="${col}" font-size="10.5" font-weight="700" font-family="Consolas,monospace">${t.side} ${t.px.toLocaleString(undefined,{maximumFractionDigits:t.px<100?2:0})}</text>`;
+  }
+  s += `<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="chit"/>`;
+  el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  el.innerHTML = s;
+  el.querySelector(".chit").addEventListener("mousemove", e => {
+    const box = el.getBoundingClientRect();
+    const i = Math.max(0, Math.min(view.length - 1, Math.floor((e.clientX - box.left - pad.l) / ((box.width - pad.l - pad.r) / view.length))));
+    const c = view[i];
+    const d = new Date(c.t).toISOString().slice(5, 16).replace("T", " ");
+    const partial = i === view.length - 1 ? " · <i>forming</i>" : "";
+    showTip(`<b>${d} UTC${partial}</b><br>O ${c.o.toLocaleString()} H ${c.h.toLocaleString()}<br>L ${c.l.toLocaleString()} C ${c.c.toLocaleString()}`, e.clientX, e.clientY);
+  });
+  el.querySelector(".chit").addEventListener("mouseleave", hideTip);
+}
+
+async function liveRegime(anchor, interval) {
+  const rows = await klines(anchor, interval, 320);
+  rows.pop(); // drop forming candle — same rule as the bot
+  const closes = rows.map(c => c.c);
+  const f = emaSeries(closes, 50).pop(), s = emaSeries(closes, 200).pop();
+  if (f == null || s == null) return null;
+  const r = f / s - 1;
+  return r > 0.002 ? "up" : (r < -0.002 ? "down" : "chop");
+}
+
+function fmtPct(x) { return (x >= 0 ? "+" : "") + x.toFixed(2) + "%"; }
+
+async function refreshLive() {
+  const blocks = document.getElementById("live-blocks");
+  const bySymbol = {};
+  for (const st of STRATS) (bySymbol[st.symbol] = bySymbol[st.symbol] || []).push(st);
+  let regimeCache = {};
+  for (const [sym, strats] of Object.entries(bySymbol)) {
+    let holder = document.getElementById("lb-" + sym);
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.id = "lb-" + sym;
+      holder.innerHTML = `<div class="watch" id="watch-${sym}" style="font-size:13px; line-height:1.65;"></div>
+        <div class="chart-scroll" style="margin-top:6px;"><svg id="chart-${sym}" width="100%" height="240"></svg></div>`;
+      blocks.appendChild(holder);
+    }
+    try {
+      const candles = await klines(sym, "1h", 180);
+      const closed = candles.slice(0, -1);
+      const closes = closed.map(c => c.c);
+      const bb = bollinger(closes);
+      const sq = squeezeRead(closes, bb);
+      const upT = bb.up[bb.up.length - 1], loT = bb.lo[bb.lo.length - 1];
+      const px = candles[candles.length - 1].c;
+      let gateTxt = "", allowLong = true, allowShort = true;
+      const gated = strats.find(s => s.regime_filter);
+      if (gated) {
+        const key = gated.regime_anchor + gated.regime_interval;
+        if (!(key in regimeCache)) regimeCache[key] = await liveRegime(gated.regime_anchor, gated.regime_interval);
+        const tr = regimeCache[key];
+        allowLong = tr === "up"; allowShort = tr === "down";
+        const col = tr === "up" ? "var(--gain)" : (tr === "down" ? "var(--loss)" : "var(--muted)");
+        gateTxt = ` · gate: <b style="color:${col}">${gated.regime_anchor.slice(0,3)} ${gated.regime_interval} ${String(tr).toUpperCase()}</b>` +
+                  (tr === "up" ? " → longs only" : tr === "down" ? " → shorts only" : " → all entries blocked");
+      }
+      const dLong = (upT - px) / px * 100, dShort = (loT - px) / px * 100;
+      let waitTxt;
+      if (sq.armed) {
+        const longLeg = (!gated || allowLong) ? `1h close <b style="color:var(--gain)">above ${upT.toLocaleString(undefined,{maximumFractionDigits:upT<100?2:0})}</b> → LONG (${fmtPct(dLong)} away)` : "";
+        const shortLeg = (!gated || allowShort) ? `1h close <b style="color:var(--loss)">below ${loT.toLocaleString(undefined,{maximumFractionDigits:loT<100?2:0})}</b> → SHORT (${fmtPct(dShort)} away)` : "";
+        const legs = [longLeg, shortLeg].filter(Boolean).join(" or ");
+        waitTxt = `<span class="pill ok"><span class="dot"></span>SQUEEZE ARMED</span> (band width at 60-bar low ${sq.barsAgo === 0 ? "this bar" : sq.barsAgo + " bar" + (sq.barsAgo > 1 ? "s" : "") + " ago"}) — waiting for ${legs || "<i>nothing (gate blocks both sides)</i>"}`;
+      } else {
+        const ratio = sq.low60 ? (sq.bbw / sq.low60) : null;
+        waitTxt = `<span class="pill">SQUEEZE NOT ARMED</span> — band width ${sq.bbw ? (sq.bbw*100).toFixed(2) : "?"}% vs 60-bar low ${(sq.low60*100).toFixed(2)}%` +
+                  (ratio ? ` (${ratio.toFixed(1)}× the low; volatility must compress first — no entry can trigger yet)` : "");
+      }
+      document.getElementById("watch-" + sym).innerHTML =
+        `<b class="mono">${sym.slice(0,3)}/USDT</b> <span class="bignum num" style="font-size:19px;">$${px.toLocaleString(undefined,{maximumFractionDigits:px<100?2:0})}</span>${gateTxt}<br>${waitTxt}`;
+      candleChart(document.getElementById("chart-" + sym), candles, bb,
+        [{ side: "LONG", px: (!gated || allowLong) ? upT : null },
+         { side: "SHORT", px: (!gated || allowShort) ? loT : null }]);
+      liveState[sym] = true;
+    } catch (e) {
+      document.getElementById("watch-" + sym).innerHTML =
+        `<b class="mono">${sym}</b> — <span style="color:var(--muted)">live data unavailable (${e.message}); retrying…</span>`;
+    }
+  }
+  const ok = Object.values(liveState).some(Boolean);
+  document.getElementById("live-pill").className = "pill " + (ok ? "ok" : "warn");
+  document.getElementById("live-label").textContent = ok ? "LIVE" : "RECONNECTING";
+}
+
+let nextIn = 0;
+setInterval(() => {
+  nextIn -= 1;
+  if (nextIn <= 0) { nextIn = REFRESH_S; refreshLive(); }
+  const el = document.getElementById("live-count");
+  if (el) el.textContent = `Live refresh in ${nextIn}s.`;
+}, 1000);
+refreshLive(); nextIn = REFRESH_S;
 </script>
 </body>
 </html>
