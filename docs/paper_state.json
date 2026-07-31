@@ -37,11 +37,27 @@
  "capital": 10000.0,
  "peak_capital": 10000.0,
  "killed": false,
- "open_positions": [],
+ "open_positions": [
+  {
+   "strategy_id": "btc_squeeze_1h",
+   "symbol": "BTCUSDT",
+   "direction": "short",
+   "entry_ts": 1785470400000,
+   "entry_date": "2026-07-31 04:00",
+   "entry_price": 64300.0,
+   "stop": 64955.240816,
+   "target": 63317.138776,
+   "notional": 9813.19,
+   "risk_amount": 100.0,
+   "max_hold_bars": 60,
+   "bars_held": 3,
+   "mark_price": 63950.01
+  }
+ ],
  "closed_trades": [],
  "daily": {},
  "last_processed": {
-  "btc_squeeze_1h": 1785466800000,
-  "eth_squeeze_1h_gated": 1785466800000
+  "btc_squeeze_1h": 1785481200000,
+  "eth_squeeze_1h_gated": 1785481200000
  }
 }
