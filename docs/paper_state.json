@@ -41,7 +41,7 @@
  "closed_trades": [],
  "daily": {},
  "last_processed": {
-  "btc_squeeze_1h": 1785452400000,
-  "eth_squeeze_1h_gated": 1785452400000
+  "btc_squeeze_1h": 1785466800000,
+  "eth_squeeze_1h_gated": 1785466800000
  }
 }
