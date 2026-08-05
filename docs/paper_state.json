@@ -50,8 +50,8 @@
    "notional": 9988.37,
    "risk_amount": 99.88,
    "max_hold_bars": 60,
-   "bars_held": 30,
-   "mark_price": 64822.89
+   "bars_held": 32,
+   "mark_price": 64636.0
   }
  ],
  "closed_trades": [
@@ -125,7 +125,7 @@
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1785960000000,
-  "eth_squeeze_1h_gated": 1785960000000
+  "btc_squeeze_1h": 1785967200000,
+  "eth_squeeze_1h_gated": 1785967200000
  }
 }
