@@ -34,25 +34,10 @@
    }
   ]
  },
- "capital": 10016.62174449691,
+ "capital": 9963.012488207885,
  "peak_capital": 10136.261595193539,
  "killed": false,
  "open_positions": [
-  {
-   "strategy_id": "btc_squeeze_1h",
-   "symbol": "BTCUSDT",
-   "direction": "long",
-   "entry_ts": 1786197600000,
-   "entry_date": "2026-08-08 14:00",
-   "entry_price": 65129.02,
-   "stop": 64871.628123,
-   "target": 65515.107815,
-   "notional": 10016.62,
-   "risk_amount": 100.17,
-   "max_hold_bars": 60,
-   "bars_held": 8,
-   "mark_price": 64950.61
-  },
   {
    "strategy_id": "eth_squeeze_1h_gated",
    "symbol": "ETHUSDT",
@@ -65,8 +50,23 @@
    "notional": 10016.62,
    "risk_amount": 100.17,
    "max_hold_bars": 60,
-   "bars_held": 8,
-   "mark_price": 1916.75
+   "bars_held": 11,
+   "mark_price": 1916.14
+  },
+  {
+   "strategy_id": "btc_squeeze_1h",
+   "symbol": "BTCUSDT",
+   "direction": "short",
+   "entry_ts": 1786237200000,
+   "entry_date": "2026-08-09 01:00",
+   "entry_price": 64861.46,
+   "stop": 65063.732968,
+   "target": 64558.050549,
+   "notional": 9963.01,
+   "risk_amount": 99.63,
+   "max_hold_bars": 60,
+   "bars_held": 0,
+   "mark_price": 64861.46
   }
  ],
  "closed_trades": [
@@ -141,6 +141,24 @@
    "net_return_pct": 0.2828,
    "pnl": 28.25,
    "capital_after": 10016.62
+  },
+  {
+   "strategy_id": "btc_squeeze_1h",
+   "symbol": "BTCUSDT",
+   "direction": "long",
+   "entry_date": "2026-08-08 14:00",
+   "entry_price": 65129.02,
+   "notional": 10016.62,
+   "stop": 64871.628123,
+   "target": 65515.107815,
+   "exit_date": "2026-08-09 02:00",
+   "exit_price": 64871.628123,
+   "exit_reason": "stop",
+   "bars_held": 11,
+   "gross_return_pct": -0.3952,
+   "net_return_pct": -0.5352,
+   "pnl": -53.61,
+   "capital_after": 9963.01
   }
  ],
  "daily": {
@@ -159,10 +177,14 @@
   "2026-08-07": {
    "start_capital": 9988.372489103709,
    "realized_pnl": 28.249255393200652
+  },
+  "2026-08-09": {
+   "start_capital": 10016.62174449691,
+   "realized_pnl": -53.60925628902517
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1786226400000,
-  "eth_squeeze_1h_gated": 1786226400000
+  "btc_squeeze_1h": 1786237200000,
+  "eth_squeeze_1h_gated": 1786237200000
  }
 }
