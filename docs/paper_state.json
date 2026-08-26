@@ -37,7 +37,23 @@
  "capital": 9700.321496264904,
  "peak_capital": 10136.261595193539,
  "killed": false,
- "open_positions": [],
+ "open_positions": [
+  {
+   "strategy_id": "eth_squeeze_1h_gated",
+   "symbol": "ETHUSDT",
+   "direction": "long",
+   "entry_ts": 1787778000000,
+   "entry_date": "2026-08-26 21:00",
+   "entry_price": 2496.82,
+   "stop": 2455.455825,
+   "target": 2579.548349,
+   "notional": 5855.3,
+   "risk_amount": 97.0,
+   "max_hold_bars": 60,
+   "bars_held": 1,
+   "mark_price": 2493.73
+  }
+ ],
  "closed_trades": [
   {
    "strategy_id": "btc_squeeze_1h",
@@ -233,7 +249,7 @@
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1787767200000,
-  "eth_squeeze_1h_gated": 1787767200000
+  "btc_squeeze_1h": 1787781600000,
+  "eth_squeeze_1h_gated": 1787781600000
  }
 }
