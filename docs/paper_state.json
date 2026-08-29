@@ -50,8 +50,8 @@
    "notional": 9595.12,
    "risk_amount": 95.95,
    "max_hold_bars": 60,
-   "bars_held": 3,
-   "mark_price": 78100.0
+   "bars_held": 6,
+   "mark_price": 78129.92
   },
   {
    "strategy_id": "eth_squeeze_1h_gated",
@@ -65,8 +65,8 @@
    "notional": 9595.12,
    "risk_amount": 95.95,
    "max_hold_bars": 60,
-   "bars_held": 3,
-   "mark_price": 2450.74
+   "bars_held": 6,
+   "mark_price": 2452.82
   }
  ],
  "closed_trades": [
@@ -286,7 +286,7 @@
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1788022800000,
-  "eth_squeeze_1h_gated": 1788022800000
+  "btc_squeeze_1h": 1788033600000,
+  "eth_squeeze_1h_gated": 1788033600000
  }
 }
