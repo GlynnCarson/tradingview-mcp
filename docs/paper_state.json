@@ -551,7 +551,7 @@
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1791421200000,
-  "eth_squeeze_1h_gated": 1791421200000
+  "btc_squeeze_1h": 1791450000000,
+  "eth_squeeze_1h_gated": 1791450000000
  }
 }
