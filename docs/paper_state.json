@@ -34,26 +34,10 @@
    }
   ]
  },
- "capital": 9922.834806665434,
+ "capital": 9810.729928585826,
  "peak_capital": 10148.938560120083,
  "killed": false,
- "open_positions": [
-  {
-   "strategy_id": "btc_squeeze_1h",
-   "symbol": "BTCUSDT",
-   "direction": "long",
-   "entry_ts": 1792148400000,
-   "entry_date": "2026-10-16 11:00",
-   "entry_price": 82640.73,
-   "stop": 81749.153443,
-   "target": 83978.094835,
-   "notional": 9197.53,
-   "risk_amount": 99.23,
-   "max_hold_bars": 60,
-   "bars_held": 0,
-   "mark_price": 82640.73
-  }
- ],
+ "open_positions": [],
  "closed_trades": [
   {
    "strategy_id": "btc_squeeze_1h",
@@ -540,6 +524,24 @@
    "net_return_pct": -0.8431,
    "pnl": -84.91,
    "capital_after": 9922.83
+  },
+  {
+   "strategy_id": "btc_squeeze_1h",
+   "symbol": "BTCUSDT",
+   "direction": "long",
+   "entry_date": "2026-10-16 11:00",
+   "entry_price": 82640.73,
+   "notional": 9197.53,
+   "stop": 81749.153443,
+   "target": 83978.094835,
+   "exit_date": "2026-10-16 14:00",
+   "exit_price": 81749.153443,
+   "exit_reason": "stop",
+   "bars_held": 2,
+   "gross_return_pct": -1.0789,
+   "net_return_pct": -1.2189,
+   "pnl": -112.1,
+   "capital_after": 9810.73
   }
  ],
  "daily": {
@@ -622,10 +624,14 @@
   "2026-10-11": {
    "start_capital": 10009.897323025949,
    "realized_pnl": -87.06251636051692
+  },
+  "2026-10-16": {
+   "start_capital": 9922.834806665434,
+   "realized_pnl": -112.10487807960806
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1792148400000,
-  "eth_squeeze_1h_gated": 1792148400000
+  "btc_squeeze_1h": 1792166400000,
+  "eth_squeeze_1h_gated": 1792166400000
  }
 }
