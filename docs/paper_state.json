@@ -50,8 +50,23 @@
    "notional": 10188.96,
    "risk_amount": 101.89,
    "max_hold_bars": 60,
-   "bars_held": 0,
-   "mark_price": 75758.01
+   "bars_held": 4,
+   "mark_price": 75805.19
+  },
+  {
+   "strategy_id": "eth_squeeze_1h_gated",
+   "symbol": "ETHUSDT",
+   "direction": "short",
+   "entry_ts": 1794067200000,
+   "entry_date": "2026-11-07 16:00",
+   "entry_price": 2233.63,
+   "stop": 2253.502952,
+   "target": 2193.884095,
+   "notional": 10188.96,
+   "risk_amount": 101.89,
+   "max_hold_bars": 60,
+   "bars_held": 3,
+   "mark_price": 2235.57
   }
  ],
  "closed_trades": [
@@ -815,7 +830,7 @@
   }
  },
  "last_processed": {
-  "btc_squeeze_1h": 1794063600000,
-  "eth_squeeze_1h_gated": 1794063600000
+  "btc_squeeze_1h": 1794078000000,
+  "eth_squeeze_1h_gated": 1794078000000
  }
 }
